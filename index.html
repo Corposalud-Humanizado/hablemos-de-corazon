@@ -130,6 +130,8 @@ p{margin:0}
 .rlab span{font-size:13px;color:var(--muted)}
 .route.off{opacity:.55;pointer-events:none}
 .qk{color:var(--blue-ink)}
+.codecard{border:2px dashed var(--green);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;background:var(--green-soft)}
+.codecard .code{font-family:var(--display);font-size:32px;line-height:1.1;letter-spacing:.08em;color:var(--blue-ink);user-select:all}
 .preview{white-space:pre-wrap;font-size:13.5px;background:var(--surface-2);border:1px dashed var(--line);border-radius:14px;padding:12px;max-height:220px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .contact{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:15px}
 .contact b{font-variant-numeric:tabular-nums;user-select:all}
@@ -182,7 +184,13 @@ const Q=[
 ];
 const FUNC=[["😊","Nada difícil"],["🙂","Algo difícil"],["😕","Muy difícil"],["😣","Extremadamente difícil"]];
 const CHEER={0:["tabla","Empecemos. No hay respuestas buenas ni malas."],3:["pulgar","¡Vas muy bien! Sigue a tu ritmo."],6:["guino","Piensa en las últimas dos semanas."],9:["tabla","Respira profundo. Ahora hablemos de preocupaciones y nervios."],12:["sorpresa","¡Wow, ya casi terminas!"],16:["pulgar","Última pregunta. Gracias por tu sinceridad."]};
-const S={step:"welcome",i:0,ans:Array(16).fill(null),func:null,anon:true,name:"",area:"",phone:"",pref:"WhatsApp",consentAt:null,riskShown:false};
+const S={step:"welcome",i:0,ans:Array(16).fill(null),func:null,anon:true,name:"",area:"",phone:"",pref:"WhatsApp",consentAt:null,riskShown:false,code:"",returning:false,apoyo:null};
+const LS="hc_codigo";
+function getStored(){try{return localStorage.getItem(LS)||""}catch(e){return ""}}
+function store(c){try{localStorage.setItem(LS,c)}catch(e){}}
+function newCode(){const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";let s="";for(let i=0;i<4;i++){let x;try{x=crypto.getRandomValues(new Uint32Array(1))[0]}catch(e){x=Math.floor(Math.random()*1e9)}s+=A[x%A.length]}return "HC-"+s}
+function normCode(v){v=String(v||"").toUpperCase().replace(/\s/g,"");if(/^[A-Z0-9]{4}$/.test(v))v="HC-"+v;if(/^HC[A-Z0-9]{4}$/.test(v))v="HC-"+v.slice(2);return /^HC-[A-Z0-9]{4}$/.test(v)?v:""}
+const APOYO=[["psi","🧑‍⚕️","Sí, con Psicología de Corposalud"],["arl","🛡️","Sí, con la ARL"],["eps","🏥","Sí, con mi EPS u otro profesional"],["no","🙅","No he recibido apoyo"]];
 const SID=Math.random().toString(36).slice(2,10).padEnd(8,"0");
 const EXEC="https://script.google.com/macros/s/AKfycbyE0Dl-YNKQZyBOY5ZcSSEdEGkrRIW_7mYI8SjA7d_IKNQjIllLICddapjIl7qrpVqTTQ/exec";
 function T(d){try{d.id=SID;fetch(EXEC,{method:"POST",mode:"no-cors",credentials:"omit",keepalive:true,headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(d)}).catch(function(){})}catch(e){}}
@@ -232,11 +240,14 @@ function consent(){S.step="consent";T({paso:2,etapa:"Consentimiento"});render(`
       <li>Para mejorar el programa se registran <b>estadísticas anónimas</b>: hasta qué pantalla llegaste, el nivel del resultado y si tocaste algún botón de apoyo. No se registra tu nombre, tu celular ni tus respuestas.</li>
       <li>Si las envías, las recibe únicamente ${PSI}, bajo secreto profesional (Ley 1090 de 2006), para ofrecerte acompañamiento.</li>
       <li>Tus datos se tratan según la Ley 1581 de 2012 de protección de datos personales. Puedes pedir su corrección o eliminación cuando quieras.</li>
+      <li>Al terminar recibirás un <b>código de seguimiento</b> anónimo (por ejemplo HC-7KQ4) para comparar tu avance si repites la evaluación. Si envías tu resumen por WhatsApp, la psicóloga podrá relacionar ese código contigo para hacer tu seguimiento.</li>
       <li>Tu participación o tus respuestas <b>no afectan</b> tu evaluación de desempeño ni tu vinculación laboral.</li>
     </ul>
   </div>
   <label class="check"><input type="checkbox" id="c1"><span>Leí la información y <b>acepto participar</b> de manera voluntaria.</span></label>
   <label class="check"><input type="checkbox" id="c2"><span>Autorizo el tratamiento de los datos que yo decida compartir, para fines de acompañamiento psicológico.</span></label>
+  <h3>¿Ya te has evaluado antes?</h3>
+  <div class="field"><label for="f-code">Tu código de seguimiento (opcional)</label><input id="f-code" placeholder="Ej.: HC-7KQ4" value="${esc(S.code||getStored())}" autocomplete="off" autocapitalize="characters" spellcheck="false"><span class="small muted" id="code-note">${getStored()?"Este celular ya tiene un código guardado. Si no es tuyo, bórralo.":"Si es tu primera vez, déjalo vacío: al final te daremos uno."}</span></div>
   <h3>¿Cómo quieres participar?</h3>
   <div class="seg">
     <label><input type="radio" name="mode" id="m-anon" value="anon" ${S.anon?"checked":""}><b>🕶️ De forma anónima</b><span class="small muted">No escribes tu nombre.</span></label>
@@ -254,7 +265,10 @@ function consent(){S.step="consent";T({paso:2,etapa:"Consentimiento"});render(`
   $("#c1").onchange=upd;$("#c2").onchange=upd;
   document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>{S.anon=$("#m-anon").checked;$("#fields").hidden=S.anon;$("#anon-note").hidden=!S.anon});
   $("#back").onclick=welcome;
-  $("#next").onclick=()=>{if(!S.anon){S.name=$("#f-name").value.trim();S.area=$("#f-area").value.trim();S.phone=$("#f-phone").value.trim();S.pref=$("#f-pref").value}S.consentAt=now();T({consentimiento:true,modalidad:S.anon?"anon":"datos"});S.i=0;question()};
+  $("#next").onclick=()=>{const raw=$("#f-code").value.trim(),c=normCode(raw);
+    if(raw&&!c){const n=$("#code-note");n.textContent="Revisa el código: debe verse así, HC-7KQ4 (HC, un guion y 4 letras o números).";n.style.color="var(--crit)";$("#f-code").focus();return}
+    S.returning=!!c;S.code=c||newCode();store(S.code);
+    if(!S.anon){S.name=$("#f-name").value.trim();S.area=$("#f-area").value.trim();S.phone=$("#f-phone").value.trim();S.pref=$("#f-pref").value}S.consentAt=now();T({consentimiento:true,modalidad:S.anon?"anon":"datos",codigo:S.code,tipo:S.returning?"re":"pri"});S.i=0;question()};
 }
 
 function question(){S.step="q";const i=S.i,total=17;
@@ -296,10 +310,20 @@ function funcQ(){T({paso:19,etapa:"Pregunta 17 de 17"});render(`
   <p class="q">Lo que marcaste, ¿qué tan difícil te ha hecho trabajar, atender tu casa o llevarte bien con otras personas?</p>
   <div class="opts">${FUNC.map((o,v)=>`<button class="opt ${S.func===v?"sel":""}" data-v="${v}"><span class="em">${o[0]}</span>${o[1]}</button>`).join("")}</div>
   <div class="row"><button class="btn btn-ghost" id="back">Anterior</button></div>`);
-  view.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{S.func=+b.dataset.v;b.classList.add("sel");setTimeout(result,220)});
+  view.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{S.func=+b.dataset.v;b.classList.add("sel");setTimeout(S.returning?apoyoQ:result,220)});
   $("#back").onclick=()=>{S.i=15;question()};
 }
 
+function apoyoQ(){render(`
+  <div class="progress"><div class="plabel"><span>Una pregunta más</span><span>Tu seguimiento</span></div><div class="bar"><span style="width:100%"></span></div></div>
+  ${guide("tabla","Como ya te habías evaluado antes, quiero saber cómo te ha ido.")}
+  <p class="q">Desde tu última evaluación, ¿recibiste acompañamiento para tu salud emocional?</p>
+  <div class="opts">${APOYO.map(o=>`<button class="opt ${S.apoyo===o[0]?"sel":""}" data-v="${o[0]}"><span class="em">${o[1]}</span>${o[2]}</button>`).join("")}</div>
+  <div class="row"><button class="btn btn-ghost" id="back">Anterior</button></div>`);
+  view.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{S.apoyo=b.dataset.v;b.classList.add("sel");setTimeout(result,220)});
+  $("#back").onclick=funcQ;
+}
+function codeLine(){return `🔑 Código de seguimiento: *${S.code}* (${S.returning?"reevaluación":"primera evaluación"})`}
 function who(){return S.anon?"Participante anónimo/a":`${S.name||"Sin nombre"}${S.area?" · "+S.area:""}`}
 function topSymptoms(){return Q.map((q,i)=>({q,v:S.ans[i]})).filter(x=>x.v>=2).map(x=>`• ${x.q.k} (${OPTS[x.v][1].toLowerCase()})`)}
 function interp(){
@@ -313,6 +337,8 @@ function fullMsg(){
   return [`🔔 *HABLEMOS DE CORAZÓN · Solicitud de acompañamiento*`,
   `Para: ${PSI}`,`Fecha: ${now()}`,``,
   `👤 ${who()}`,
+  codeLine(),
+  S.apoyo?`🤝 Apoyo desde la última evaluación: ${APOYO.find(a=>a[0]===S.apoyo)[2].replace(/^Sí, con (mi )?/,"")}`:null,
   !S.anon&&S.phone?`📱 Celular: ${S.phone}`:null,
   !S.anon?`📞 Prefiere: ${S.pref}`:null,``,
   `🚦 *Nivel: ${L.name.toUpperCase()}*`,
@@ -326,7 +352,7 @@ function fullMsg(){
   `_Resultado de tamizaje autoaplicado. No constituye diagnóstico; requiere valoración profesional._`
   ].filter(x=>x!==null).join("\n");
 }
-function urgentMsg(){return [`🚨 *HABLEMOS DE CORAZÓN · ALERTA PRIORITARIA*`,`Para: ${PSI}`,`Fecha: ${now()}`,``,`👤 ${who()}`,!S.anon&&S.phone?`📱 Celular: ${S.phone}`:null,``,
+function urgentMsg(){return [`🚨 *HABLEMOS DE CORAZÓN · ALERTA PRIORITARIA*`,`Para: ${PSI}`,`Fecha: ${now()}`,``,`👤 ${who()}`,codeLine(),!S.anon&&S.phone?`📱 Celular: ${S.phone}`:null,``,
   `La persona respondió afirmativamente a pensamientos de muerte o de hacerse daño (PHQ-9 ítem 9: ${OPTS[S.ans[8]][1].toLowerCase()}).`,`Necesito hablar con alguien. Por favor contáctame lo antes posible.`,``,`✅ Consentimiento informado aceptado el ${S.consentAt}.`].filter(x=>x!==null).join("\n")}
 function sstMsg(){return `Hola, vengo de la página Hablemos de Corazón de Corposalud.
 ¿Quisiera orientación sobre las líneas de ayuda en salud mental de la ARL Colmena?`}
@@ -348,7 +374,7 @@ const TIPS={
 
 function result(){S.step="result";
   const p=sum("phq"),g=sum("gad"),L=level(),msg=fullMsg();
-  T({paso:20,etapa:"Resultado",termino:true,nivel:L.name,phq:p,gad:g,alerta:(S.ans[8]||0)>0});
+  T({paso:20,etapa:"Resultado",termino:true,nivel:L.name,phq:p,gad:g,alerta:(S.ans[8]||0)>0,codigo:S.code,tipo:S.returning?"re":"pri",apoyo:S.apoyo||undefined});
   const cheerTxt={ok:"¡Qué bien! Sigue cuidándote.",mid:"Gracias por tomarte este tiempo. Aquí estamos.",high:"Hablar también es una forma de cuidarte.",crit:"Recuerda levantar la mano y pedir ayuda. Estamos contigo."}[L.k];
   render(`
   ${guide(L.img,cheerTxt)}
@@ -359,6 +385,7 @@ function result(){S.step="result";
     <div class="scale"><span class="small muted">Estado de ánimo · PHQ-9</span><span class="n">${p}<small> / 27</small></span><span class="small">Intensidad ${phqBand(p)}</span></div>
     <div class="scale"><span class="small muted">Ansiedad · GAD-7</span><span class="n">${g}<small> / 21</small></span><span class="small">Intensidad ${gadBand(g)}</span></div>
   </div>
+  <div class="codecard"><span class="small muted">Tu código de seguimiento</span><b class="code">${S.code}</b><span class="small">Guárdalo o tómale una captura. Repite tu evaluación <b>en 4 semanas</b> y escribe este código al empezar para ver tu avance. No contiene tu nombre.</span><button class="btn btn-ghost" id="copycode" style="padding:10px 16px">Copiar código</button></div>
   <h3>Recomendaciones para ti</h3>
   <ul class="tips">${TIPS[L.k].map(t=>`<li>${t}</li>`).join("")}</ul>
   ${L.k==="crit"?`<div class="lines"><div class="line"><span>Línea nacional de salud mental, 24 horas</span><b>192 opción 4</b></div><div class="line"><span>Emergencias</span><b>123</b></div></div>`:""}
@@ -374,7 +401,8 @@ function result(){S.step="result";
   $("#copy").onclick=()=>{const done=()=>$("#toast").textContent="Mensaje copiado. Pégalo en WhatsApp.";
     try{navigator.clipboard.writeText(msg).then(done,()=>{selectPv()})}catch(e){selectPv()}};
   function selectPv(){$("details").open=true;const r=document.createRange();r.selectNodeContents($("#pv"));const s=getSelection();s.removeAllRanges();s.addRange(r);$("#toast").textContent="Selecciona y copia el mensaje resaltado."}
-  $("#again").onclick=()=>{S.ans=Array(16).fill(null);S.func=null;S.riskShown=false;welcome()};
+  $("#copycode").onclick=()=>{const b=$("#copycode");try{navigator.clipboard.writeText(S.code).then(()=>b.textContent="Código copiado",()=>b.textContent="Anótalo: "+S.code)}catch(e){b.textContent="Anótalo: "+S.code}};
+  $("#again").onclick=()=>{S.apoyo=null;S.ans=Array(16).fill(null);S.func=null;S.riskShown=false;welcome()};
 }
 welcome();T({paso:1,etapa:"Bienvenida"});
 </script>
